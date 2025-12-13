@@ -1,0 +1,17 @@
+{
+  "name": "fanselect-proxy",
+  "version": "1.0.0",
+  "description": "Proxy simple para saltar firewall de Hostgator",
+  "main": "node_proxy_bridge.js",
+  "scripts": {
+    "start": "node node_proxy_bridge.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.2",
+    "cors": "^2.8.5",
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
