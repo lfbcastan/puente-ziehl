@@ -31,31 +31,33 @@ app.post('/api/bridge', async (req, res) => {
 const GEBHARDT_URL = "https://www.nicotra-gebhardt.com:8095/WebServiceGH";
 
 app.post('/api/gebhardt-search', async (req, res) => {
-    console.log(">>> [v5] Petición Gebhardt recibida:", JSON.stringify(req.body));
+    console.log(">>> [v6] Petición Gebhardt recibida:", JSON.stringify(req.body));
     const input = req.body;
     const qv = input.qv || 0;
     const psf = input.psf || 0;
     const temperature = input.temperature || 20;
     const unit_system = input.unit_system || 'm';
 
+    // Usando estructura EXACTA de la documentación: BLACKBOX > EINGABE
     const xmlRequest = `<?xml version="1.0" encoding="UTF-8"?>
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:geb="http://www.nicotra-gebhardt.com:8092/WebServiceGH">
-   <soap:Header/>
-   <soap:Body>
-      <geb:Blackbox>
-         <geb:ANTRIEBART>DIR_FU_FREI</geb:ANTRIEBART>
-         <geb:T>${temperature}</geb:T>
-         <geb:T_EINHEIT>${unit_system === 'i' ? 'F' : 'C'}</geb:T_EINHEIT>
-         <geb:V>${qv}</geb:V>
-         <geb:V_EINHEIT>${unit_system === 'i' ? 'ft3/min' : 'm3/h'}</geb:V_EINHEIT>
-         <geb:DPFA>${psf}</geb:DPFA>
-         <geb:P_EINHEIT>${unit_system === 'i' ? 'inch wg' : 'PA'}</geb:P_EINHEIT>
-         <geb:EINBAUART>A</geb:EINBAUART>
-         <geb:SPRACHE>ES</geb:SPRACHE>
-         <geb:WEBSERVICE_VER>4.16</geb:WEBSERVICE_VER>
-      </geb:Blackbox>
-   </soap:Body>
-</soap:Envelope>`;
+<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:geb="http://tempuri.org/geb.xsd"> 
+ <SOAP-ENV:Body> 
+  <geb:BLACKBOX> 
+   <EINGABE> 
+      <ANTRIEBART>DIR_FU_FREI</ANTRIEBART> 
+      <V>${qv}</V>
+      <V_EINHEIT>${unit_system === 'i' ? 'ft3/min' : 'm3/h'}</V_EINHEIT>
+      <DPFA>${psf}</DPFA> 
+      <P_EINHEIT>${unit_system === 'i' ? 'inch wg' : 'PA'}</P_EINHEIT>
+      <T>${temperature}</T>
+      <T_EINHEIT>${unit_system === 'i' ? 'F' : 'C'}</T_EINHEIT>
+      <EINBAUART>A</EINBAUART> 
+      <SPRACHE>ES</SPRACHE>
+      <WEBSERVICE_VER>4.16</WEBSERVICE_VER>
+   </EINGABE> 
+  </geb:BLACKBOX> 
+ </SOAP-ENV:Body> 
+</SOAP-ENV:Envelope>`;
 
     try {
         const response = await axios.post(GEBHARDT_URL, xmlRequest, {
@@ -70,17 +72,12 @@ app.post('/api/gebhardt-search', async (req, res) => {
 
         const result = await parser.parseStringPromise(response.data);
 
-        // --- BÚSQUEDA RECURSIVA DE KEY (Case Insensitive) ---
         function findKey(obj, target) {
             if (!obj || typeof obj !== 'object') return null;
             const targetUpper = target.toUpperCase();
-
-            // Buscar en las llaves del nivel actual
             for (let key in obj) {
                 if (key.toUpperCase() === targetUpper) return obj[key];
             }
-
-            // Buscar en niveles inferiores
             for (let key in obj) {
                 const found = findKey(obj[key], target);
                 if (found) return found;
@@ -88,18 +85,16 @@ app.post('/api/gebhardt-search', async (req, res) => {
             return null;
         }
 
-        // Buscamos directamente la respuesta o la salida
         const blackboxResponse = findKey(result, 'BlackboxResponse') || findKey(result, 'AUSGABE') || result;
-
-        // Buscamos RESULTATE esté donde esté dentro de lo que encontramos
         const rawResults = findKey(blackboxResponse, 'RESULTATE') || findKey(blackboxResponse, 'results');
 
         if (!rawResults) {
-            console.error(">>> ERROR: No se encontró RESULTATE en la respuesta XML.");
+            // Si el status es ERROR, intentamos ver qué hay en Header o Body para diagnosticar
             return res.status(500).json({
-                error: "Estructura XML inesperada o vacía",
-                debug_keys: Object.keys(result),
-                full_result_keys: JSON.stringify(result).substring(0, 500)
+                error: "Sin resultados o estructura inválida",
+                status_error: findKey(result, 'STATUS'),
+                anzahl_result: findKey(result, 'ANZAHLRESULT'),
+                full_debug: JSON.stringify(result).substring(0, 1000)
             });
         }
 
@@ -150,7 +145,7 @@ app.post('/api/gebhardt-search', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-    res.send('<h1>Puente Activo (ZA + Gebhardt) v5 🚀</h1>');
+    res.send('<h1>Puente Activo (ZA + Gebhardt) v6 🚀</h1>');
 });
 
 app.listen(PORT, () => {
