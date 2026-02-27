@@ -37,15 +37,17 @@ app.post('/api/gebhardt-search', async (req, res) => {
     const temperature = input.temperature || 20;
     const unit_system = input.unit_system || 'm';
 
-    console.log(`>>> [v9] Buscando Gebhardt: Qv=${qv}, Psf=${psf}, T=${temperature}`);
+    console.log(`>>> [v11] Buscando Gebhardt: Qv=${qv}, Psf=${psf}`);
 
-    const generateXml = (antrieb) => `<?xml version="1.0" encoding="UTF-8"?>
+    const callGebhardt = async (baureihe, ausfuehrung = "") => {
+        const xmlRequest = `<?xml version="1.0" encoding="UTF-8"?>
 <SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:geb="http://tempuri.org/geb.xsd"> 
  <SOAP-ENV:Body> 
   <geb:BLACKBOX> 
    <EINGABE> 
-      <ANTRIEBART>${antrieb}</ANTRIEBART> 
-      <BAUREIHE>COPRA</BAUREIHE> 
+      <ANTRIEBART>DIR_FU_AUS</ANTRIEBART> 
+      <BAUREIHE>${baureihe}</BAUREIHE> 
+      <AUSFUEHRUNG>${ausfuehrung}</AUSFUEHRUNG> 
       <T>${temperature}</T><T_EINHEIT>C</T_EINHEIT>
       <V>${qv}</V><V_EINHEIT>m3/h</V_EINHEIT>
       <DPFA>${psf}</DPFA><P_EINHEIT>PA</P_EINHEIT>
@@ -60,39 +62,60 @@ app.post('/api/gebhardt-search', async (req, res) => {
  </SOAP-ENV:Body> 
 </SOAP-ENV:Envelope>`;
 
-    try {
-        // Probamos con DIR_FU_AUS primero
-        let response = await axios.post(GEBHARDT_URL, generateXml("DIR_FU_AUS"), {
+        const resp = await axios.post(GEBHARDT_URL, xmlRequest, {
             headers: { 'Content-Type': 'text/xml; charset=utf-8' },
-            timeout: 30000
+            timeout: 20000
         });
 
         const parser = new xml2js.Parser({ explicitArray: false, tagNameProcessors: [xml2js.processors.stripPrefix] });
-        let result = await parser.parseStringPromise(response.data);
+        return await parser.parseStringPromise(resp.data);
+    };
 
-        function findKey(obj, target) {
-            if (!obj || typeof obj !== 'object') return null;
-            const targetUpper = target.toUpperCase();
-            for (let key in obj) { if (key.toUpperCase() === targetUpper) return obj[key]; }
-            for (let key in obj) { const found = findKey(obj[key], target); if (found) return found; }
-            return null;
+    function findKey(obj, target) {
+        if (!obj || typeof obj !== 'object') return null;
+        const targetUpper = target.toUpperCase();
+        for (let key in obj) { if (key.toUpperCase() === targetUpper) return obj[key]; }
+        for (let key in obj) { const found = findKey(obj[key], target); if (found) return found; }
+        return null;
+    }
+
+    try {
+        // ESTRATEGIA v11: Probar variantes específicas de documentación
+        const trials = [
+            { br: "COPRA", aus: "PA" },
+            { br: "PA-C", aus: "" },
+            { br: "COPRA CORE", aus: "PA" }
+        ];
+
+        let result = null;
+        let lastErrorMsg = "";
+
+        for (const trial of trials) {
+            console.log(`>>> Probando serie: ${trial.br} (${trial.aus})`);
+            result = await callGebhardt(trial.br, trial.aus);
+            const status = findKey(result, 'STATUS');
+            const count = parseInt(findKey(result, 'ANZAHLRESULT') || "0");
+
+            if (status === "OK" && count > 0) {
+                console.log(`>>> ¡ÉXITO en v11 con ${trial.br}! Encontrados: ${count}`);
+                break;
+            } else {
+                lastErrorMsg = findKey(result, 'STATUS') || "Sin resultados";
+                result = null;
+            }
         }
 
-        let blackboxResponse = findKey(result, 'BlackboxResponse') || findKey(result, 'AUSGABE') || result;
-        let rawResults = findKey(blackboxResponse, 'RESULTATE') || findKey(blackboxResponse, 'results');
-
-        // Si no hay resultados, devolvemos un objeto de diagnóstico para saber POR QUÉ
-        if (!rawResults) {
-            const status = findKey(result, 'STATUS') || "UNKNOWN";
-            const anzahl = findKey(result, 'ANZAHLRESULT') || "0";
-
+        if (!result) {
             return res.json([{
                 TYPE: "DIAGNOSTIC",
-                ARTICLE_NO: "EMPTY_RESULT",
-                DESCRIPTION: `API Status: ${status} | Count: ${anzahl} | Keys: ${Object.keys(blackboxResponse).join(',')}`,
+                ARTICLE_NO: "EMPTY",
+                DESCRIPTION: `API rechaza COPRA con PA. Msg: ${lastErrorMsg}`,
                 BRAND: 'Gebhardt-DEBUG'
             }]);
         }
+
+        const blackboxResponse = findKey(result, 'BlackboxResponse') || findKey(result, 'AUSGABE') || result;
+        const rawResults = findKey(blackboxResponse, 'RESULTATE') || findKey(blackboxResponse, 'results');
 
         let fans = [];
         const resultats = rawResults.RESULTAT || rawResults.resultat;
@@ -109,13 +132,13 @@ app.post('/api/gebhardt-search', async (req, res) => {
                 BRAND: 'Gebhardt'
             }));
         }
-
         res.json(fans);
+
     } catch (error) {
         console.error(">>> ERROR:", error.message);
-        res.status(502).json({ error: "Error v9: " + error.message });
+        res.status(502).json({ error: "Error v11: " + error.message });
     }
 });
 
-app.get('/', (req, res) => { res.send('<h1>Puente Activo v9 🚀</h1>'); });
+app.get('/', (req, res) => { res.send('<h1>Puente Activo v11 🚀</h1>'); });
 app.listen(PORT, () => { console.log(`Servidor Puente corriendo en puerto ${PORT}`); });
