@@ -31,7 +31,7 @@ app.post('/api/bridge', async (req, res) => {
 const GEBHARDT_URL = "https://www.nicotra-gebhardt.com:8095/WebServiceGH";
 
 app.post('/api/gebhardt-search', async (req, res) => {
-    console.log(">>> Petición Gebhardt recibida:", JSON.stringify(req.body));
+    console.log(">>> [v5] Petición Gebhardt recibida:", JSON.stringify(req.body));
     const input = req.body;
     const qv = input.qv || 0;
     const psf = input.psf || 0;
@@ -58,13 +58,10 @@ app.post('/api/gebhardt-search', async (req, res) => {
 </soap:Envelope>`;
 
     try {
-        console.log(">>> Enviando XML a Gebhardt...");
         const response = await axios.post(GEBHARDT_URL, xmlRequest, {
             headers: { 'Content-Type': 'text/xml; charset=utf-8' },
             timeout: 30000
         });
-
-        console.log(">>> Respuesta de Gebhardt recibida (longitud:", response.data.length, ")");
 
         const parser = new xml2js.Parser({
             explicitArray: false,
@@ -73,35 +70,44 @@ app.post('/api/gebhardt-search', async (req, res) => {
 
         const result = await parser.parseStringPromise(response.data);
 
-        // --- NAVEGACIÓN SEGURA ULTRA-ROBUSTA ---
-        const getNested = (obj, keys) => {
-            return keys.reduce((acc, key) => {
-                if (!acc) return null;
-                // Intentar exacto, luego mayúsculas, luego minúsculas
-                return acc[key] || acc[key.toUpperCase()] || acc[key.toLowerCase()] || null;
-            }, obj);
-        };
+        // --- BÚSQUEDA RECURSIVA DE KEY (Case Insensitive) ---
+        function findKey(obj, target) {
+            if (!obj || typeof obj !== 'object') return null;
+            const targetUpper = target.toUpperCase();
 
-        const blackboxResponse = getNested(result, ['Envelope', 'Body', 'BlackboxResponse']);
+            // Buscar en las llaves del nivel actual
+            for (let key in obj) {
+                if (key.toUpperCase() === targetUpper) return obj[key];
+            }
 
-        if (!blackboxResponse) {
-            console.error(">>> ERROR: No se encontró BlackboxResponse en el XML.");
-            return res.status(500).json({
-                error: "Estructura XML inesperada",
-                raw_keys: Object.keys(result),
-                debug_envelope: result.Envelope ? Object.keys(result.Envelope) : "no envelope"
-            });
+            // Buscar en niveles inferiores
+            for (let key in obj) {
+                const found = findKey(obj[key], target);
+                if (found) return found;
+            }
+            return null;
         }
 
-        const ausgabe = blackboxResponse.AUSGABE || blackboxResponse.ausgabe || blackboxResponse;
-        const rawResults = ausgabe.RESULTATE || ausgabe.resultate || ausgabe.results || ausgabe;
+        // Buscamos directamente la respuesta o la salida
+        const blackboxResponse = findKey(result, 'BlackboxResponse') || findKey(result, 'AUSGABE') || result;
+
+        // Buscamos RESULTATE esté donde esté dentro de lo que encontramos
+        const rawResults = findKey(blackboxResponse, 'RESULTATE') || findKey(blackboxResponse, 'results');
+
+        if (!rawResults) {
+            console.error(">>> ERROR: No se encontró RESULTATE en la respuesta XML.");
+            return res.status(500).json({
+                error: "Estructura XML inesperada o vacía",
+                debug_keys: Object.keys(result),
+                full_result_keys: JSON.stringify(result).substring(0, 500)
+            });
+        }
 
         let fans = [];
         const resultats = rawResults.RESULTAT || rawResults.resultat;
 
         if (resultats) {
             const items = Array.isArray(resultats) ? resultats : [resultats];
-
             const filteredFans = items.filter(item => {
                 const name = (item.BEZEICHNUNG || "").toUpperCase();
                 const type = (item.TYP || "").toUpperCase();
@@ -120,7 +126,6 @@ app.post('/api/gebhardt-search', async (req, res) => {
                     BRAND: 'Gebhardt'
                 }));
             } else {
-                console.log(">>> INFO: Sin coincidencias para PA-C/COPRA. Devolviendo debug info.");
                 fans = items.slice(0, 5).map(item => ({
                     TYPE: item.TYP || item.typ || "N/A",
                     ARTICLE_NO: item.BEZEICHNUNG || "DEBUG_NO_FILTER_MATCH",
@@ -132,8 +137,6 @@ app.post('/api/gebhardt-search', async (req, res) => {
                     BRAND: 'Gebhardt-DEBUG'
                 }));
             }
-        } else {
-            console.log(">>> INFO: No se encontraron RESULTAT en RESULTATE.");
         }
 
         res.json(fans);
@@ -141,13 +144,13 @@ app.post('/api/gebhardt-search', async (req, res) => {
         console.error(">>> ERROR en Puente Gebhardt:", error.message);
         res.status(502).json({
             error: "Error en el puente: " + error.message,
-            stack: error.stack
+            json_detail: error.response ? error.response.data : null
         });
     }
 });
 
 app.get('/', (req, res) => {
-    res.send('<h1>Puente Activo (ZA + Gebhardt) v4 🚀</h1>');
+    res.send('<h1>Puente Activo (ZA + Gebhardt) v5 🚀</h1>');
 });
 
 app.listen(PORT, () => {
