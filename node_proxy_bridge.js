@@ -90,8 +90,7 @@ app.post('/api/gebhardt-search', async (req, res) => {
             return isNaN(parsed) ? 0 : parsed;
         };
 
-        const fans = items.map(item => {
-            // MAPPING SEGÚN SOLICITUD DEL USUARIO
+        const fans = items.map((item, idx) => {
             const baugrRaw = getRawVal(item, 'BAUGROESSE') || "";
             const baugrNum = baugrRaw.match(/\d+/) ? parseFloat(baugrRaw.match(/\d+/)[0]) : 0;
 
@@ -99,62 +98,58 @@ app.post('/api/gebhardt-search', async (req, res) => {
             const valPsf = getVal(item, 'DPFA_X');
             const valN = getVal(item, 'DREHZAHL');
             const valNvMax = getVal(item, 'NV_MAX');
-            const valP1S = getVal(item, 'P1S'); // Potencia Eléctrica Total (kW)
-            const valPW = getVal(item, 'PW');   // Potencia Eje (kW)
-            const valStrom = getVal(item, 'STROM'); // Corriente (A)
-
-            // Eficiencias (Eje)
-            const etaFa = getVal(item, 'ETA_FA'); // Static efficiency at shaft
-            const etaT = getVal(item, 'ETA_T');   // Total efficiency at shaft
-
-            // Eficiencias (Sistema/Global)
-            const etaFas = getVal(item, 'ETA_FAS'); // System Static efficiency
-            const etaTs = getVal(item, 'ETA_TS') || getVal(item, 'ETA_T_SYS'); // System Total efficiency
-
+            const valP1S = getVal(item, 'P1S');
+            const valPW = getVal(item, 'PW');
+            const valStrom = getVal(item, 'STROM');
+            const etaFa = getVal(item, 'ETA_FA');
+            const etaT = getVal(item, 'ETA_T');
+            const etaFas = getVal(item, 'ETA_FAS');
+            const etaTs = getVal(item, 'ETA_TS') || getVal(item, 'ETA_T_SYS');
             const noise = getVal(item, 'LWA_DRUCK');
             const motorRating = getVal(item, 'NENNLEISTUNG');
             const nomSpeed = getVal(item, 'NENNDREHZAHL');
 
-            return {
+            const mapped = {
                 TYPE: findKey(item, 'TYP') || "COPRA",
                 ARTICLE_NO: findKey(item, 'BEZEICHNUNG') || "N/A",
                 DESCRIPTION: findKey(item, 'BEZEICHNUNG') || "",
                 BRAND: 'Gebhardt',
-
-                // Mapeo para Componentes de la UI (prefijo ZA_)
-                ZA_BG: baugrNum,      // Fan Size
-                ZA_QV: valV,          // Flow
-                ZA_PSF: valPsf,       // Pressure
-                ZA_N: valN,           // Operating RPM
-                ZA_NMAX: valNvMax,    // Max RPM
-                ZA_I: valStrom,       // Current
-                ZA_ETASF: etaFa,      // Static Efficiency (Shaft)
-                ZA_ETAF: etaT,        // Total Efficiency (Shaft)
-                ZA_ETASF_SYS: etaFas, // Static Efficiency (System)
-                ZA_ETAF_SYS: etaTs,   // Total Efficiency (System)
-                ZA_LWA6: noise,       // Noise
-                ZA_P1: (valP1S > 0 ? valP1S : valPW) * 1000, // En Watios (preferimos consumo total)
-                ZA_PW: valPW,         // Shaft power (kW)
-
-                // Motor Data
+                ZA_BG: baugrNum,
+                ZA_QV: valV,
+                ZA_PSF: valPsf,
+                ZA_N: valN,
+                ZA_NMAX: valNvMax,
+                ZA_I: valStrom,
+                ZA_ETASF: etaFa,
+                ZA_ETAF: etaT,
+                ZA_ETASF_SYS: etaFas,
+                ZA_ETAF_SYS: etaTs,
+                ZA_LWA6: noise,
+                ZA_P1: (valP1S > 0 ? valP1S : valPW) * 1000,
+                ZA_PW: valPW,
                 motor_power_kw: motorRating,
                 nominal_speed: nomSpeed,
-
-                // Respaldo
                 V: valV,
                 DPFA_X: valPsf,
                 DREHZAHL: valN,
                 PW: valPW,
                 P1S: valP1S
             };
+
+            // Solo incluimos la respuesta cruda en el primer item para no saturar
+            if (idx === 0) {
+                mapped.DEBUG_RAW_GEBHARDT = JSON.stringify(item);
+            }
+
+            return mapped;
         });
 
         res.json(fans);
 
     } catch (error) {
-        res.status(502).json({ error: "Error v17: " + error.message });
+        res.status(502).json({ error: "Error v18: " + error.message });
     }
 });
 
-app.get('/', (req, res) => { res.send('<h1>Puente Activo v17 🚀</h1>'); });
+app.get('/', (req, res) => { res.send('<h1>Puente Activo v18 🚀</h1>'); });
 app.listen(PORT, () => { console.log(`Servidor Puente corriendo en puerto ${PORT}`); });
