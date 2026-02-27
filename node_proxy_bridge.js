@@ -30,7 +30,6 @@ app.post('/api/gebhardt-search', async (req, res) => {
     const qv = input.qv || 3500;
     const psf = input.psf || 500;
     const temperature = input.temperature || 20;
-    const unit_system = input.unit_system || 'm';
 
     const xmlRequest = `<?xml version="1.0" encoding="UTF-8"?>
 <SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:geb="http://tempuri.org/geb.xsd"> 
@@ -81,18 +80,30 @@ app.post('/api/gebhardt-search', async (req, res) => {
             const val = findKey(item, key);
             if (val === null || val === undefined) return 0;
             if (typeof val === 'object' && val._) return parseFloat(val._);
-            return parseFloat(val);
+            const parsed = parseFloat(val);
+            return isNaN(parsed) ? 0 : parsed;
         };
 
         const fans = items.map(item => {
-            // Buscamos Potencia en PW, P1 o P1S
-            let power = getVal(item, 'PW');
-            if (power === 0) power = getVal(item, 'P1S');
-            if (power === 0) power = getVal(item, 'P1');
-
+            // MAPPING SEGÚN DOCUMENTACIÓN SECCIÓN 3
             const valV = getVal(item, 'V');
             const valPsf = getVal(item, 'DPFA_X');
             const valN = getVal(item, 'DREHZAHL');
+            const valP1S = getVal(item, 'P1S'); // Potencia Eléctrica Total (kW)
+            const valPW = getVal(item, 'PW');   // Potencia Eje (kW)
+            const valStrom = getVal(item, 'STROM') || getVal(item, 'I_TRABAJO') || 0; // Corriente (A)
+
+            // Eficiencias
+            const etaFas = getVal(item, 'ETA_FAS'); // Eficiencia Sistema Estática (%)
+            const etaTs = getVal(item, 'ETA_TS') || getVal(item, 'ETA_T_SYS'); // Eficiencia Sistema Total (%)
+            const etaFa = getVal(item, 'ETA_FA'); // Eficiencia Turbina Estática (%)
+            const etaT = getVal(item, 'ETA_T');   // Eficiencia Turbina Total (%)
+
+            // Otros
+            const noise = getVal(item, 'LWA_DRUCK'); // Ruido dB(A)
+            const sfp = getVal(item, 'SFP');
+            const motorRating = getVal(item, 'NENNLEISTUNG'); // kW
+            const nomSpeed = getVal(item, 'NENNDREHZAHL');
 
             return {
                 TYPE: findKey(item, 'TYP') || "COPRA",
@@ -103,21 +114,32 @@ app.post('/api/gebhardt-search', async (req, res) => {
                 ZA_QV: valV,
                 ZA_PSF: valPsf,
                 ZA_N: valN,
-                ZA_P1: power, // Usamos P1 (Watios)
-                // Mapeo original como respaldo
+                ZA_P1: (valP1S > 0 ? valP1S : valPW) * 1000, // En Watios (frontend convierte /1000)
+                ZA_I: valStrom,
+                ZA_ETASF_SYS: etaFas,
+                ZA_ETAF_SYS: etaTs,
+                ZA_ETASF: etaFa,
+                ZA_ETAF: etaT,
+                ZA_LWA6: noise,
+                ZA_SFP: sfp,
+                // Motor Data
+                motor_power_kw: motorRating,
+                nominal_speed: nomSpeed,
+                // Respaldo original
                 V: valV,
                 DPFA_X: valPsf,
                 DREHZAHL: valN,
-                PW: power / 1000 // PW en kW
+                PW: valPW,
+                P1S: valP1S
             };
         });
 
         res.json(fans);
 
     } catch (error) {
-        res.status(502).json({ error: "Error v15: " + error.message });
+        res.status(502).json({ error: "Error v16: " + error.message });
     }
 });
 
-app.get('/', (req, res) => { res.send('<h1>Puente Activo v15 🚀</h1>'); });
+app.get('/', (req, res) => { res.send('<h1>Puente Activo v16 🚀</h1>'); });
 app.listen(PORT, () => { console.log(`Servidor Puente corriendo en puerto ${PORT}`); });
