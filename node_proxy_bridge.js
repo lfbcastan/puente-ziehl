@@ -31,29 +31,46 @@ app.post('/api/bridge', async (req, res) => {
 const GEBHARDT_URL = "https://www.nicotra-gebhardt.com:8095/WebServiceGH";
 
 app.post('/api/gebhardt-search', async (req, res) => {
-    console.log(">>> [v6] Petición Gebhardt recibida:", JSON.stringify(req.body));
     const input = req.body;
-    const qv = input.qv || 0;
-    const psf = input.psf || 0;
+    const qv = input.qv || 3500;
+    const psf = input.psf || 500;
     const temperature = input.temperature || 20;
     const unit_system = input.unit_system || 'm';
 
-    // Usando estructura EXACTA de la documentación: BLACKBOX > EINGABE
+    console.log(`>>> [v8] Buscando Gebhardt: Qv=${qv}, Psf=${psf}, T=${temperature}`);
+
+    // Estructura ROBUSTA con datos dinámicos inyectados
     const xmlRequest = `<?xml version="1.0" encoding="UTF-8"?>
-<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:geb="http://tempuri.org/geb.xsd"> 
+<SOAP-ENV:Envelope 
+xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" 
+xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xmlns:xsd="http://www.w3.org/2001/XMLSchema" 
+xmlns:geb="http://tempuri.org/geb.xsd"> 
  <SOAP-ENV:Body> 
   <geb:BLACKBOX> 
    <EINGABE> 
-      <ANTRIEBART>DIR_FU_FREI</ANTRIEBART> 
+      <ANTRIEBART>DIR_FU_AUS</ANTRIEBART> 
+      <BAUREIHE>COPRA</BAUREIHE> 
+      <T>${temperature}</T>
+      <T_EINHEIT>${unit_system === 'i' ? 'F' : 'C'}</T_EINHEIT>
       <V>${qv}</V>
       <V_EINHEIT>${unit_system === 'i' ? 'ft3/min' : 'm3/h'}</V_EINHEIT>
       <DPFA>${psf}</DPFA> 
       <P_EINHEIT>${unit_system === 'i' ? 'inch wg' : 'PA'}</P_EINHEIT>
-      <T>${temperature}</T>
-      <T_EINHEIT>${unit_system === 'i' ? 'F' : 'C'}</T_EINHEIT>
+      <ATEX>ID_KEIN</ATEX>
+      <ENTRAUCH_KLASSE>ID_KEIN</ENTRAUCH_KLASSE>
       <EINBAUART>A</EINBAUART> 
-      <SPRACHE>ES</SPRACHE>
-      <WEBSERVICE_VER>4.16</WEBSERVICE_VER>
+      <RHO1>1.2</RHO1> 
+      <RHO_EINHEIT>kg/m^3</RHO_EINHEIT>
+      <SUCH_MIN>0.9</SUCH_MIN>
+      <SUCH_MAX>1.4</SUCH_MAX>
+      <FREQU_SP_STROM>3-400-50</FREQU_SP_STROM>
+      <ZUBEHOER>NEIN</ZUBEHOER>
+      <ZUBEHOER_ALLES>NEIN</ZUBEHOER_ALLES>
+      <MOTORAUFBAU>1</MOTORAUFBAU>
+      <DREHRICHTUNG>L</DREHRICHTUNG>
+      <GEHAEUSESTELLUNG>90</GEHAEUSESTELLUNG>
    </EINGABE> 
   </geb:BLACKBOX> 
  </SOAP-ENV:Body> 
@@ -89,13 +106,7 @@ app.post('/api/gebhardt-search', async (req, res) => {
         const rawResults = findKey(blackboxResponse, 'RESULTATE') || findKey(blackboxResponse, 'results');
 
         if (!rawResults) {
-            // Si el status es ERROR, intentamos ver qué hay en Header o Body para diagnosticar
-            return res.status(500).json({
-                error: "Sin resultados o estructura inválida",
-                status_error: findKey(result, 'STATUS'),
-                anzahl_result: findKey(result, 'ANZAHLRESULT'),
-                full_debug: JSON.stringify(result).substring(0, 1000)
-            });
+            return res.status(200).json([]); // Devolver vacío si no hay resultados pero la conexión fue exitosa
         }
 
         let fans = [];
@@ -103,49 +114,27 @@ app.post('/api/gebhardt-search', async (req, res) => {
 
         if (resultats) {
             const items = Array.isArray(resultats) ? resultats : [resultats];
-            const filteredFans = items.filter(item => {
-                const name = (item.BEZEICHNUNG || "").toUpperCase();
-                const type = (item.TYP || "").toUpperCase();
-                return name.includes("PA-C") || name.includes("COPRA") || type.includes("PA-C") || type.includes("COPRA");
-            });
-
-            if (filteredFans.length > 0) {
-                fans = filteredFans.map(item => ({
-                    TYPE: item.TYP || item.typ || "N/A",
-                    ARTICLE_NO: item.BEZEICHNUNG || item.bezeichnung || "N/A",
-                    DESCRIPTION: item.BEZEICHNUNG || item.bezeichnung || "",
-                    V: parseFloat(item.V || item.v || 0),
-                    DPFA_X: parseFloat(item.DPFA_X || item.dpfa_x || 0),
-                    DREHZAHL: parseFloat(item.DREHZAHL || item.drehzahl || 0),
-                    PW: parseFloat(item.PW || item.pw || 0),
-                    BRAND: 'Gebhardt'
-                }));
-            } else {
-                fans = items.slice(0, 5).map(item => ({
-                    TYPE: item.TYP || item.typ || "N/A",
-                    ARTICLE_NO: item.BEZEICHNUNG || "DEBUG_NO_FILTER_MATCH",
-                    DESCRIPTION: `DEBUG: total=${items.length} | first_name=${item.BEZEICHNUNG}`,
-                    V: parseFloat(item.V || item.v || 0),
-                    DPFA_X: parseFloat(item.DPFA_X || item.dpfa_x || 0),
-                    DREHZAHL: parseFloat(item.DREHZAHL || item.drehzahl || 0),
-                    PW: parseFloat(item.PW || item.pw || 0),
-                    BRAND: 'Gebhardt-DEBUG'
-                }));
-            }
+            fans = items.map(item => ({
+                TYPE: item.TYP || item.typ || "N/A",
+                ARTICLE_NO: item.BEZEICHNUNG || item.bezeichnung || "N/A",
+                DESCRIPTION: item.BEZEICHNUNG || item.bezeichnung || "",
+                V: parseFloat(item.V || item.v || 0),
+                DPFA_X: parseFloat(item.DPFA_X || item.dpfa_x || 0),
+                DREHZAHL: parseFloat(item.DREHZAHL || item.drehzahl || 0),
+                PW: parseFloat(item.PW || item.pw || 0),
+                BRAND: 'Gebhardt'
+            }));
         }
 
         res.json(fans);
     } catch (error) {
-        console.error(">>> ERROR en Puente Gebhardt:", error.message);
-        res.status(502).json({
-            error: "Error en el puente: " + error.message,
-            json_detail: error.response ? error.response.data : null
-        });
+        console.error(">>> ERROR:", error.message);
+        res.status(502).json({ error: "Error en el puente: " + error.message });
     }
 });
 
 app.get('/', (req, res) => {
-    res.send('<h1>Puente Activo (ZA + Gebhardt) v6 🚀</h1>');
+    res.send('<h1>Puente Activo (ZA + Gebhardt) v8 🚀</h1>');
 });
 
 app.listen(PORT, () => {
