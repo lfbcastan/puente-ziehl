@@ -76,33 +76,43 @@ app.post('/api/gebhardt-search', async (req, res) => {
         const resultats = rawResults.RESULTAT || rawResults.resultat;
         const items = Array.isArray(resultats) ? resultats : [resultats];
 
-        const getVal = (item, key) => {
+        const getRawVal = (item, key) => {
             const val = findKey(item, key);
-            if (val === null || val === undefined) return 0;
-            if (typeof val === 'object' && val._) return parseFloat(val._);
+            if (val === null || val === undefined) return null;
+            if (typeof val === 'object' && val._) return val._;
+            return val;
+        };
+
+        const getVal = (item, key) => {
+            const val = getRawVal(item, key);
+            if (val === null) return 0;
             const parsed = parseFloat(val);
             return isNaN(parsed) ? 0 : parsed;
         };
 
         const fans = items.map(item => {
-            // MAPPING SEGÚN DOCUMENTACIÓN SECCIÓN 3
+            // MAPPING SEGÚN SOLICITUD DEL USUARIO
+            const baugrRaw = getRawVal(item, 'BAUGROESSE') || "";
+            const baugrNum = baugrRaw.match(/\d+/) ? parseFloat(baugrRaw.match(/\d+/)[0]) : 0;
+
             const valV = getVal(item, 'V');
             const valPsf = getVal(item, 'DPFA_X');
             const valN = getVal(item, 'DREHZAHL');
+            const valNvMax = getVal(item, 'NV_MAX');
             const valP1S = getVal(item, 'P1S'); // Potencia Eléctrica Total (kW)
             const valPW = getVal(item, 'PW');   // Potencia Eje (kW)
-            const valStrom = getVal(item, 'STROM') || getVal(item, 'I_TRABAJO') || 0; // Corriente (A)
+            const valStrom = getVal(item, 'STROM'); // Corriente (A)
 
-            // Eficiencias
-            const etaFas = getVal(item, 'ETA_FAS'); // Eficiencia Sistema Estática (%)
-            const etaTs = getVal(item, 'ETA_TS') || getVal(item, 'ETA_T_SYS'); // Eficiencia Sistema Total (%)
-            const etaFa = getVal(item, 'ETA_FA'); // Eficiencia Turbina Estática (%)
-            const etaT = getVal(item, 'ETA_T');   // Eficiencia Turbina Total (%)
+            // Eficiencias (Eje)
+            const etaFa = getVal(item, 'ETA_FA'); // Static efficiency at shaft
+            const etaT = getVal(item, 'ETA_T');   // Total efficiency at shaft
 
-            // Otros
-            const noise = getVal(item, 'LWA_DRUCK'); // Ruido dB(A)
-            const sfp = getVal(item, 'SFP');
-            const motorRating = getVal(item, 'NENNLEISTUNG'); // kW
+            // Eficiencias (Sistema/Global)
+            const etaFas = getVal(item, 'ETA_FAS'); // System Static efficiency
+            const etaTs = getVal(item, 'ETA_TS') || getVal(item, 'ETA_T_SYS'); // System Total efficiency
+
+            const noise = getVal(item, 'LWA_DRUCK');
+            const motorRating = getVal(item, 'NENNLEISTUNG');
             const nomSpeed = getVal(item, 'NENNDREHZAHL');
 
             return {
@@ -110,22 +120,27 @@ app.post('/api/gebhardt-search', async (req, res) => {
                 ARTICLE_NO: findKey(item, 'BEZEICHNUNG') || "N/A",
                 DESCRIPTION: findKey(item, 'BEZEICHNUNG') || "",
                 BRAND: 'Gebhardt',
+
                 // Mapeo para Componentes de la UI (prefijo ZA_)
-                ZA_QV: valV,
-                ZA_PSF: valPsf,
-                ZA_N: valN,
-                ZA_P1: (valP1S > 0 ? valP1S : valPW) * 1000, // En Watios (frontend convierte /1000)
-                ZA_I: valStrom,
-                ZA_ETASF_SYS: etaFas,
-                ZA_ETAF_SYS: etaTs,
-                ZA_ETASF: etaFa,
-                ZA_ETAF: etaT,
-                ZA_LWA6: noise,
-                ZA_SFP: sfp,
+                ZA_BG: baugrNum,      // Fan Size
+                ZA_QV: valV,          // Flow
+                ZA_PSF: valPsf,       // Pressure
+                ZA_N: valN,           // Operating RPM
+                ZA_NMAX: valNvMax,    // Max RPM
+                ZA_I: valStrom,       // Current
+                ZA_ETASF: etaFa,      // Static Efficiency (Shaft)
+                ZA_ETAF: etaT,        // Total Efficiency (Shaft)
+                ZA_ETASF_SYS: etaFas, // Static Efficiency (System)
+                ZA_ETAF_SYS: etaTs,   // Total Efficiency (System)
+                ZA_LWA6: noise,       // Noise
+                ZA_P1: (valP1S > 0 ? valP1S : valPW) * 1000, // En Watios (preferimos consumo total)
+                ZA_PW: valPW,         // Shaft power (kW)
+
                 // Motor Data
                 motor_power_kw: motorRating,
                 nominal_speed: nomSpeed,
-                // Respaldo original
+
+                // Respaldo
                 V: valV,
                 DPFA_X: valPsf,
                 DREHZAHL: valN,
@@ -137,9 +152,9 @@ app.post('/api/gebhardt-search', async (req, res) => {
         res.json(fans);
 
     } catch (error) {
-        res.status(502).json({ error: "Error v16: " + error.message });
+        res.status(502).json({ error: "Error v17: " + error.message });
     }
 });
 
-app.get('/', (req, res) => { res.send('<h1>Puente Activo v16 🚀</h1>'); });
+app.get('/', (req, res) => { res.send('<h1>Puente Activo v17 🚀</h1>'); });
 app.listen(PORT, () => { console.log(`Servidor Puente corriendo en puerto ${PORT}`); });
