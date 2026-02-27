@@ -31,9 +31,6 @@ app.post('/api/gebhardt-search', async (req, res) => {
     const psf = input.psf || 500;
     const temperature = input.temperature || 20;
 
-    console.log(`>>> [v13] Probando Frecuencia Exacta: Qv=${qv}, Psf=${psf}`);
-
-    // CONFIGURACIÓN BASADA EN DOCUMENTACIÓN EXACTA PARA COPRA
     const xmlRequest = `<?xml version="1.0" encoding="UTF-8"?>
 <SOAP-ENV:Envelope 
 xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" 
@@ -82,35 +79,51 @@ xmlns:geb="http://tempuri.org/geb.xsd">
         const rawResults = findKey(blackboxResponse, 'RESULTATE') || findKey(blackboxResponse, 'results');
 
         if (!rawResults) {
-            const statusMsg = findKey(result, 'STATUS') || "Sin resultados";
-            return res.json([{
-                TYPE: "DIAGNOSTIC",
-                ARTICLE_NO: "EMPTY",
-                DESCRIPTION: `v13 | Status: ${statusMsg} | Freq: 3-400-50/60`,
-                BRAND: 'Gebhardt-DEBUG'
-            }]);
+            return res.json([]);
         }
 
         let fans = [];
         const resultats = rawResults.RESULTAT || rawResults.resultat;
+
         if (resultats) {
             const items = Array.isArray(resultats) ? resultats : [resultats];
-            fans = items.map(item => ({
-                TYPE: item.TYP || "N/A",
-                ARTICLE_NO: item.BEZEICHNUNG || "N/A",
-                DESCRIPTION: item.BEZEICHNUNG || "",
-                V: parseFloat(item.V || 0),
-                DPFA_X: parseFloat(item.DPFA_X || 0),
-                DREHZAHL: parseFloat(item.DREHZAHL || 0),
-                PW: parseFloat(item.PW || 0),
-                BRAND: 'Gebhardt'
-            }));
+
+            // Función auxiliar para obtener valores numéricos de forma robusta
+            const getVal = (item, key) => {
+                const val = findKey(item, key);
+                if (val === null || val === undefined) return 0;
+                // Si xml2js devuelve un objeto {_: 'val'} por atributos
+                if (typeof val === 'object' && val._) return parseFloat(val._);
+                return parseFloat(val);
+            };
+
+            fans = items.map((item, index) => {
+                const mapped = {
+                    TYPE: findKey(item, 'TYP') || "N/A",
+                    ARTICLE_NO: findKey(item, 'BEZEICHNUNG') || "N/A",
+                    DESCRIPTION: findKey(item, 'BEZEICHNUNG') || "",
+                    V: getVal(item, 'V'),
+                    DPFA_X: getVal(item, 'DPFA_X'),
+                    DREHZAHL: getVal(item, 'DREHZAHL'),
+                    PW: getVal(item, 'PW'),
+                    BRAND: 'Gebhardt'
+                };
+
+                // Agregamos el item original al primero para debuggear llaves reales
+                if (index === 0) {
+                    mapped.DEBUG_RAW_KEYS = Object.keys(item).join(',');
+                    mapped.DEBUG_FULL_ITEM = JSON.stringify(item).substring(0, 500);
+                }
+
+                return mapped;
+            });
         }
         res.json(fans);
+
     } catch (error) {
-        res.status(502).json({ error: "Error v13: " + error.message });
+        res.status(502).json({ error: "Error v14: " + error.message });
     }
 });
 
-app.get('/', (req, res) => { res.send('<h1>Puente Activo v13 🚀</h1>'); });
+app.get('/', (req, res) => { res.send('<h1>Puente Activo v14 🚀</h1>'); });
 app.listen(PORT, () => { console.log(`Servidor Puente corriendo en puerto ${PORT}`); });
