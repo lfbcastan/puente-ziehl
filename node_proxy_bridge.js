@@ -85,19 +85,39 @@ app.post('/api/gebhardt-search', async (req, res) => {
             const list = rawResults.RESULTAT || rawResults.resultat;
             const items = Array.isArray(list) ? list : [list];
 
-            fans = items.map(item => ({
-                TYPE: item.TYP || item.typ || "N/A",
-                ARTICLE_NO: item.BEZEICHNUNG || item.bezeichnung || "N/A",
-                DESCRIPTION: item.BEZEICHNUNG || item.bezeichnung || "",
-                V: parseFloat(item.V || item.v || 0),
-                DPFA_X: parseFloat(item.DPFA_X || item.dpfa_x || 0),
-                DREHZAHL: parseFloat(item.DREHZAHL || item.drehzahl || 0),
-                PW: parseFloat(item.PW || item.pw || 0),
-                BRAND: 'Gebhardt'
-            }));
+            const filteredFans = items.filter(item => {
+                const name = (item.BEZEICHNUNG || "").toUpperCase();
+                const type = (item.TYP || "").toUpperCase();
+                return name.includes("PA-C") || name.includes("COPRA") || type.includes("PA-C") || type.includes("COPRA");
+            });
+
+            if (filteredFans.length > 0) {
+                fans = filteredFans.map(item => ({
+                    TYPE: item.TYP || item.typ || "N/A",
+                    ARTICLE_NO: item.BEZEICHNUNG || item.bezeichnung || "N/A",
+                    DESCRIPTION: item.BEZEICHNUNG || item.bezeichnung || "",
+                    V: parseFloat(item.V || item.v || 0),
+                    DPFA_X: parseFloat(item.DPFA_X || item.dpfa_x || 0),
+                    DREHZAHL: parseFloat(item.DREHZAHL || item.drehzahl || 0),
+                    PW: parseFloat(item.PW || item.pw || 0),
+                    BRAND: 'Gebhardt'
+                }));
+            } else {
+                // FALLBACK DE DEBUG: Si no hay PA-C/COPRA, devuelve los primeros 5 para ver qué hay
+                fans = items.slice(0, 5).map(item => ({
+                    TYPE: item.TYP || item.typ || "N/A",
+                    ARTICLE_NO: item.BEZEICHNUNG || item.bezeichnung || "DEBUG_NO_FILTER_MATCH",
+                    DESCRIPTION: `DEBUG: total=${items.length} | name=${item.BEZEICHNUNG}`,
+                    V: parseFloat(item.V || item.v || 0),
+                    DPFA_X: parseFloat(item.DPFA_X || item.dpfa_x || 0),
+                    DREHZAHL: parseFloat(item.DREHZAHL || item.drehzahl || 0),
+                    PW: parseFloat(item.PW || item.pw || 0),
+                    BRAND: 'Gebhardt-DEBUG'
+                }));
+            }
         }
 
-        res.json(fans); // Return array directly to match App expectations
+        res.json(fans);
     } catch (error) {
         console.error("Error en Puente Gebhardt:", error.message);
         res.status(502).json({ error: "Error conectando a Gebhardt: " + error.message });
