@@ -36,16 +36,31 @@ app.post('/api/gebhardt-search', async (req, res) => {
  <SOAP-ENV:Body> 
   <geb:BLACKBOX> 
    <EINGABE> 
-      <ANTRIEBART>DIR_FU_AUS</ANTRIEBART> <BAUREIHE>COPRA</BAUREIHE> <AUSFUEHRUNG>PA</AUSFUEHRUNG> 
-      <T>${temperature}</T><T_EINHEIT>C</T_EINHEIT>
-      <V>${qv}</V><V_EINHEIT>m3/h</V_EINHEIT>
-      <DPFA>${psf}</DPFA><P_EINHEIT>PA</P_EINHEIT>
-      <ATEX>ID_KEIN</ATEX><ENTRAUCH_KLASSE>ID_KEIN</ENTRAUCH_KLASSE>
-      <EINBAUART>A</EINBAUART><RHO1>1.2</RHO1><RHO_EINHEIT>kg/m^3</RHO_EINHEIT>
-      <SUCH_MIN>0.9</SUCH_MIN><SUCH_MAX>1.4</SUCH_MAX>
+      <ANTRIEBART>DIR_FU_AUS</ANTRIEBART> 
+      <BAUREIHE>COPRA</BAUREIHE> 
+      <AUSFUEHRUNG>PA</AUSFUEHRUNG>
+      <ATEX>ID_KEIN</ATEX>
+      <ENTRAUCH_KLASSE>ID_KEIN</ENTRAUCH_KLASSE>
+      <T>${temperature}</T>
+      <T_EINHEIT>C</T_EINHEIT>
+      <V>${qv}</V>
+      <V_EINHEIT>m3/h</V_EINHEIT>
+      <DPT></DPT> 
+      <DPFA>${psf}</DPFA>
+      <P_EINHEIT>PA</P_EINHEIT>
+      <EINBAUART>A</EINBAUART>
+      <RHO1>1.2</RHO1>
+      <RHO_EINHEIT>kg/m^3</RHO_EINHEIT>
+      <SUCH_MIN>0.9</SUCH_MIN>
+      <SUCH_MAX>1.4</SUCH_MAX>
       <FREQU_SP_STROM>3-400-50/60</FREQU_SP_STROM>
-      <ZUBEHOER>NEIN</ZUBEHOER><ZUBEHOER_ALLES>NEIN</ZUBEHOER_ALLES>
-      <MOTORAUFBAU>1</MOTORAUFBAU><DREHRICHTUNG>L</DREHRICHTUNG><GEHAEUSESTELLUNG>90</GEHAEUSESTELLUNG>
+      <ZUBEHOER>NEIN</ZUBEHOER>
+      <ZUBEHOER_ALLES>NEIN</ZUBEHOER_ALLES>
+      <MOTORAUFBAU>1</MOTORAUFBAU>
+      <DREHRICHTUNG>L</DREHRICHTUNG>
+      <GEHAEUSESTELLUNG>90</GEHAEUSESTELLUNG>
+      <PMOT></PMOT>
+      <NMOT></NMOT>
    </EINGABE> 
   </geb:BLACKBOX> 
  </SOAP-ENV:Body> 
@@ -153,3 +168,4 @@ app.post('/api/gebhardt-search', async (req, res) => {
 
 app.get('/', (req, res) => { res.send('<h1>Puente Activo v18 🚀</h1>'); });
 app.listen(PORT, () => { console.log(`Servidor Puente corriendo en puerto ${PORT}`); });
+
