@@ -44,7 +44,8 @@ app.post('/api/gebhardt-search', async (req, res) => {
       <EINBAUART>A</EINBAUART><RHO1>1.2</RHO1><RHO_EINHEIT>kg/m^3</RHO_EINHEIT>
       <SUCH_MIN>0.9</SUCH_MIN><SUCH_MAX>1.4</SUCH_MAX>
       <FREQU_SP_STROM>3-400-50/60</FREQU_SP_STROM>
-      <ZUBEHOER>NEIN</ZUBEHOER><ZUBEHOER_ALLES>NEIN</ZUBEHOER_ALLES>
+      <ZUBEHOER>JA</ZUBEHOER><ZUBEHOER_ALLES>JA</ZUBEHOER_ALLES>
+      <KENNFELD_IMAGE>JA</KENNFELD_IMAGE><MASSBILD_IMAGE>JA</MASSBILD_IMAGE><MASSBILD_DXF_IMAGE>JA</MASSBILD_DXF_IMAGE>
       <MOTORAUFBAU>1</MOTORAUFBAU><DREHRICHTUNG>L</DREHRICHTUNG><GEHAEUSESTELLUNG>90</GEHAEUSESTELLUNG>
    </EINGABE> 
   </geb:BLACKBOX> 
@@ -106,8 +107,32 @@ app.post('/api/gebhardt-search', async (req, res) => {
             const etaFas = getVal(item, 'ETA_FAS');
             const etaTs = getVal(item, 'ETA_TS') || getVal(item, 'ETA_T_SYS');
             const noise = getVal(item, 'LWA_DRUCK');
-            const motorRating = getVal(item, 'NENNLEISTUNG');
-            const nomSpeed = getVal(item, 'NENNDREHZAHL');
+            const sfp = getVal(item, 'SFP');
+            const iMax = getVal(item, 'I_MAX');
+
+            // Nominal fallbacks
+            let motorRating = getVal(item, 'NENNLEISTUNG');
+            if (motorRating === 0) motorRating = getVal(item, 'MAX_PM');
+
+            let nomSpeed = getVal(item, 'NENNDREHZAHL');
+            if (nomSpeed === 0) nomSpeed = getVal(item, 'NV_MAX');
+
+            // ErP Data
+            const erpData = findKey(item, 'ERP_DATEN_IM_EFFIZIENZOPTIMUM');
+            const erpEff = erpData ? getVal(erpData, 'ETA_S_OPT') : 0;
+            const erpGrade = erpData ? getVal(erpData, 'N_IST') : 0;
+
+            // Asset Construction
+            const assetBase = "https://www.nicotra-gebhardt.com:8095/html/htmltemp/";
+            const extractFilename = (path) => {
+                if (!path || typeof path !== 'string') return null;
+                const parts = path.split('\\');
+                return parts[parts.length - 1];
+            };
+
+            const imgFile = extractFilename(getRawVal(item, 'MASSBILD_IMAGE'));
+            const curveFile = extractFilename(getRawVal(item, 'KENNFELD_IMAGE'));
+            const dxfFile = extractFilename(getRawVal(item, 'MASSBILD_DXF_IMAGE'));
 
             const mapped = {
                 TYPE: findKey(item, 'TYP') || "COPRA",
@@ -129,6 +154,14 @@ app.post('/api/gebhardt-search', async (req, res) => {
                 ZA_PW: valPW,
                 motor_power_kw: motorRating,
                 nominal_speed: nomSpeed,
+                nominal_current: iMax,
+                sfp: sfp,
+                efficiency_static: etaFas,
+                erp_efficiency: erpEff,
+                erp_grade: erpGrade,
+                image_url: imgFile ? assetBase + imgFile : null,
+                curve_url: curveFile ? assetBase + curveFile : null,
+                drawing_url: dxfFile ? assetBase + dxfFile : null,
                 V: valV,
                 DPFA_X: valPsf,
                 DREHZAHL: valN,
