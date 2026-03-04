@@ -59,13 +59,11 @@ app.post('/api/gebhardt-search', async (req, res) => {
       <MOTORAUFBAU>1</MOTORAUFBAU>
       <DREHRICHTUNG>L</DREHRICHTUNG>
       <GEHAEUSESTELLUNG>90</GEHAEUSESTELLUNG>
-      <PMOT></PMOT>
-      <NMOT></NMOT>
+      <PMOT>ID_KEIN</PMOT>
+      <NMOT>ID_KEIN</NMOT>
       <ZUBEHOER>NEIN</ZUBEHOER>
         <ZUBEHOER_ALLES>JA</ZUBEHOER_ALLES>
         <WEBSERVICE_VER></WEBSERVICE_VER> 
-        <SPRACHE>DE</SPRACHE> 
-        <POLYNOM>JA</POLYNOM> 
    </EINGABE> 
   </geb:BLACKBOX> 
  </SOAP-ENV:Body> 
@@ -173,5 +171,6 @@ app.post('/api/gebhardt-search', async (req, res) => {
 
 app.get('/', (req, res) => { res.send('<h1>Puente Activo v18 🚀</h1>'); });
 app.listen(PORT, () => { console.log(`Servidor Puente corriendo en puerto ${PORT}`); });
+
 
 
