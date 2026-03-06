@@ -157,12 +157,12 @@ app.post('/api/gebhardt-search', async (req, res) => {
                 efficiency_static: valEtaSOpt,
                 erp_efficiency: valEtaSOpt,
                 erp_grade: valNIst,
-                FEI_FACTOR: valNIst, // Usamos N_IST para FEI ya que no est directo
+                FEI_FACTOR: valNIst,
                 image_url: imgFile ? assetBase + imgFile : null,
                 curve_url: curveFile ? assetBase + curveFile : null,
-                drawing_url: dxfFile ? assetBase + dxfFile : null,
+                technical_drawing_url: imgFile ? assetBase + imgFile : null,
+                dxf_url: dxfFile ? assetBase + dxfFile : null,
                 product_image_url: imgFile ? assetBase + imgFile : null,
-                technical_drawing_url: dxfFile ? assetBase + dxfFile : null,
                 CHART_FILE: curveFile ? assetBase + curveFile : null,
                 V: valV,
                 DPFA_X: valPsf,
@@ -186,5 +186,27 @@ app.post('/api/gebhardt-search', async (req, res) => {
     }
 });
 
-app.get('/', (req, res) => { res.send('<h1>Puente Activo v18 🚀</h1>'); });
+app.get('/api/gebhardt-proxy-image', async (req, res) => {
+    const targetUrl = req.query.url;
+    if (!targetUrl || !targetUrl.includes('nicotra-gebhardt.com')) {
+        return res.status(400).send('Invalid or missing URL');
+    }
+
+    try {
+        const response = await axios.get(targetUrl, {
+            responseType: 'arraybuffer',
+            timeout: 20000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+        });
+        res.set('Content-Type', response.headers['content-type']);
+        res.set('Cache-Control', 'public, max-age=3600');
+        res.send(response.data);
+    } catch (error) {
+        res.status(502).send('Bridge Image Proxy Error: ' + error.message);
+    }
+});
+
+app.get('/', (req, res) => { res.send('<h1>Puente Activo v21 🚀</h1>'); });
 app.listen(PORT, () => { console.log(`Servidor Puente corriendo en puerto ${PORT}`); });
