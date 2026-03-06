@@ -27,9 +27,17 @@ const GEBHARDT_URL = "https://www.nicotra-gebhardt.com:8095/WebServiceGH";
 
 app.post('/api/gebhardt-search', async (req, res) => {
     const input = req.body;
-    const qv = input.qv || 3500;
-    const psf = input.psf || 500;
-    const temperature = input.temperature || 20;
+    let qv = parseFloat(input.qv) || 3500;
+    let psf = parseFloat(input.psf) || 500;
+    let temperature = parseFloat(input.temperature) || 20;
+    const unitSystem = input.unit_system || 'm';
+
+    // Conversin de unidades si vienen en Sistema Imperial (IP)
+    if (unitSystem === 'i') {
+        qv = qv * 1.69901; // CFM -> m3/h
+        psf = psf * 249.089; // in.wg -> Pa
+        temperature = (temperature - 32) * 5 / 9; // F -> C
+    }
 
     const xmlRequest = `<?xml version="1.0" encoding="UTF-8"?>
 <SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:geb="http://tempuri.org/geb.xsd"> 
@@ -37,9 +45,9 @@ app.post('/api/gebhardt-search', async (req, res) => {
   <geb:BLACKBOX> 
    <EINGABE> 
       <ANTRIEBART>DIR_FU_AUS</ANTRIEBART> <BAUREIHE>COPRA</BAUREIHE> <AUSFUEHRUNG>PA</AUSFUEHRUNG> 
-      <T>${temperature}</T><T_EINHEIT>C</T_EINHEIT>
-      <V>${qv}</V><V_EINHEIT>m3/h</V_EINHEIT>
-      <DPFA>${psf}</DPFA><P_EINHEIT>PA</P_EINHEIT>
+      <T>${temperature.toFixed(2)}</T><T_EINHEIT>C</T_EINHEIT>
+      <V>${qv.toFixed(0)}</V><V_EINHEIT>m3/h</V_EINHEIT>
+      <DPFA>${psf.toFixed(0)}</DPFA><P_EINHEIT>PA</P_EINHEIT>
       <ATEX>ID_KEIN</ATEX><ENTRAUCH_KLASSE>ID_KEIN</ENTRAUCH_KLASSE>
       <EINBAUART>A</EINBAUART><RHO1>1.2</RHO1><RHO_EINHEIT>kg/m^3</RHO_EINHEIT>
       <SUCH_MIN>0.9</SUCH_MIN><SUCH_MAX>1.4</SUCH_MAX>
@@ -95,32 +103,20 @@ app.post('/api/gebhardt-search', async (req, res) => {
             const baugrRaw = getRawVal(item, 'BAUGROESSE') || "";
             const baugrNum = baugrRaw.match(/\d+/) ? parseFloat(baugrRaw.match(/\d+/)[0]) : 0;
 
+            // Mapeo solicitado por el usuario
             const valV = getVal(item, 'V');
             const valPsf = getVal(item, 'DPFA_X');
-            const valN = getVal(item, 'DREHZAHL');
-            const valNvMax = getVal(item, 'NV_MAX');
-            const valP1S = getVal(item, 'P1S');
-            const valPW = getVal(item, 'PW');
-            const valStrom = getVal(item, 'STROM');
-            const etaFa = getVal(item, 'ETA_FA');
-            const etaT = getVal(item, 'ETA_T');
-            const etaFas = getVal(item, 'ETA_FAS');
-            const etaTs = getVal(item, 'ETA_TS') || getVal(item, 'ETA_T_SYS');
+            const valDrehzahl = getVal(item, 'DREHZAHL'); // RPM Trabajo
+            const valNvMax = getVal(item, 'NV_MAX'); // RPM Nominal
+            const valP1S = getVal(item, 'P1S'); // Potencia Trabajo (kW)
+            const valMaxPm = getVal(item, 'MAX_PM'); // Potencia Nominal (kW)
+            const valEtaSOpt = getVal(item, 'ETA_S_OPT'); // Eficiencia Esttica
+            const valNIst = getVal(item, 'N_IST'); // Eficiencia Total
+            const valStrom = getVal(item, 'STROM') || getVal(item, 'I_IST') || 0; // Corriente Trabajo
+            const valIMax = getVal(item, 'I_MAX'); // Corriente Nominal (Mxima)
+
             const noise = getVal(item, 'LWA_DRUCK');
             const sfp = getVal(item, 'SFP');
-            const iMax = getVal(item, 'I_MAX');
-
-            // Nominal fallbacks
-            let motorRating = getVal(item, 'NENNLEISTUNG');
-            if (motorRating === 0) motorRating = getVal(item, 'MAX_PM');
-
-            let nomSpeed = getVal(item, 'NENNDREHZAHL');
-            if (nomSpeed === 0) nomSpeed = getVal(item, 'NV_MAX');
-
-            // ErP Data
-            const erpData = findKey(item, 'ERP_DATEN_IM_EFFIZIENZOPTIMUM');
-            const erpEff = erpData ? getVal(erpData, 'ETA_S_OPT') : 0;
-            const erpGrade = erpData ? getVal(erpData, 'N_IST') : 0;
 
             // Asset Construction
             const assetBase = "https://www.nicotra-gebhardt.com:8095/html/htmltemp/";
@@ -142,24 +138,26 @@ app.post('/api/gebhardt-search', async (req, res) => {
                 ZA_BG: baugrNum,
                 ZA_QV: valV,
                 ZA_PSF: valPsf,
-                ZA_N: valN,
+                ZA_N: valDrehzahl,
                 ZA_NMAX: valNvMax,
                 ZA_I: valStrom,
-                ZA_ETASF: etaFa,
-                ZA_ETAF: etaT,
-                ZA_ETASF_SYS: etaFas,
-                ZA_ETAF_SYS: etaTs,
+                ZA_I_NOM: valIMax,
+                ZA_P1: valP1S * 1000, // Frontend espera Watts para comparaciones
+                ZA_PW: valP1S, // Almacenamos kW en PW para compatibilidad
+                ZA_ETASF: valEtaSOpt,
+                ZA_ETAF: valNIst,
+                ZA_ETASF_SYS: valEtaSOpt,
+                ZA_ETAF_SYS: valNIst,
                 ZA_SFP: sfp,
-                ZA_I: valStrom,
-                ZA_I_NOM: iMax,
-                motor_power_kw: motorRating,
-                nominal_speed: nomSpeed,
-                nominal_current: iMax,
+                ZA_LWA6: noise,
+                motor_power_kw: valMaxPm,
+                nominal_speed: valNvMax,
+                nominal_current: valIMax,
                 sfp: sfp,
-                efficiency_static: etaFas,
-                erp_efficiency: erpEff,
-                erp_grade: erpGrade,
-                FEI_FACTOR: erpGrade,
+                efficiency_static: valEtaSOpt,
+                erp_efficiency: valEtaSOpt,
+                erp_grade: valNIst,
+                FEI_FACTOR: valNIst, // Usamos N_IST para FEI ya que no est directo
                 image_url: imgFile ? assetBase + imgFile : null,
                 curve_url: curveFile ? assetBase + curveFile : null,
                 drawing_url: dxfFile ? assetBase + dxfFile : null,
@@ -168,9 +166,9 @@ app.post('/api/gebhardt-search', async (req, res) => {
                 CHART_FILE: curveFile ? assetBase + curveFile : null,
                 V: valV,
                 DPFA_X: valPsf,
-                DREHZAHL: valN,
-                PW: valPW,
-                P1S: valP1S
+                DREHZAHL: valDrehzahl,
+                P1S: valP1S,
+                MAX_PM: valMaxPm
             };
 
             // Solo incluimos la respuesta cruda en el primer item para no saturar
