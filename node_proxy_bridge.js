@@ -122,7 +122,7 @@ app.post('/api/gebhardt-search', async (req, res) => {
             const assetBase = "https://www.nicotra-gebhardt.com:8095/html/htmltemp/";
             const extractFilename = (path) => {
                 if (!path || typeof path !== 'string') return null;
-                const parts = path.split('\\');
+                const parts = path.split(/[\\\/]/);
                 return parts[parts.length - 1];
             };
 
